@@ -4,7 +4,7 @@
 #SBATCH --error=log_second_stage_%j.err
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:01:00
 #SBATCH --mem=16G
@@ -13,4 +13,4 @@ echo "Starting torchrun on host $(hostname)"
 
 source $HOME/venv/bin/activate
 source $SCRATCH/bml-2/.env
-torchrun --nnodes 1 --nproc_per_node 1 ./main.py --n_training_steps 100
+torchrun --nnodes 1 --nproc_per_node 2 ./main.py --n_training_steps 1000
