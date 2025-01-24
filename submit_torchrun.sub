@@ -12,6 +12,5 @@
 echo "Starting submit_begin on host $(hostname)"
 
 source ./.env
-
 source ~/venv/bin/activate
 torchrun ./main.py --n_training_steps 100
