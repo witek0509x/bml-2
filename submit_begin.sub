@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --job-name=submit_begin
+#SBATCH --output=submit_begin_%j.out
+#SBATCH --error=submit_begin_%j.err
+#SBATCH --partition=plgrid-gpu-a100
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --time=0-00:01:00
+#SBATCH --mem=16G
+
+echo "Starting submit_begin on host $(hostname)"
+
+source ./.env
+wandb login
+
+source ~/env/bin/activate
+python ./main.py --n_training_steps 100
