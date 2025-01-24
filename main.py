@@ -1,4 +1,5 @@
 import argparse
+import os
 from functools import partial
 import torch
 import torch.nn as nn
@@ -439,6 +440,7 @@ def calculate_valid_loss(model, valid_dataloader, device, validation_steps):
 
 
 def train_model(config, device):
+    wandb.login(key=os.environ['WANDB_API_KEY'])
     wandb.init(project="transformer-training", config=config.__dict__)
     dataloader = get_dataloader(config.batch_size, config.seq_length)
     valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation")
