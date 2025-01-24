@@ -494,9 +494,9 @@ def main():
                         help='number of transformer layers (default: 4)')
     parser.add_argument('--dmodel', type=int, default=256, metavar='N',
                         help='model dimension (default: 256)')
-    parser.add_argument('--n_training_steps', type=float, default=1000, metavar='LR',
+    parser.add_argument('--n_training_steps', type=int, default=1000, metavar='LR',
                         help='number of training steps (default: 1000)')
-    parser.add_argument('--n_heads', type=float, default=4, metavar='M',
+    parser.add_argument('--n_heads', type=int, default=4, metavar='M',
                         help='Number of attention heads (default: 4)')
     args = parser.parse_args()
 
