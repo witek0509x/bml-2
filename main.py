@@ -486,7 +486,7 @@ def train_model(config, device):
 
 def main():
     parser = argparse.ArgumentParser(description='FSDP implementation')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--n_layers', type=int, default=4, metavar='N',
                         help='number of transformer layers (default: 4)')
@@ -499,7 +499,7 @@ def main():
     args = parser.parse_args()
 
     config = SimpleNamespace(
-        train_steps=args.train_steps,
+        train_steps=args.n_training_steps,
         vocab_size=50257,
         max_len=256,
         d_model=args.dmodel,
