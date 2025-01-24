@@ -3,8 +3,9 @@
 #SBATCH --output=submit_begin_%j.out
 #SBATCH --error=submit_begin_%j.err
 #SBATCH --partition=plgrid-gpu-a100
+#SBATCH --account=plgllmparamgr-gpu-a100
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:01:00
 #SBATCH --mem=16G
 
