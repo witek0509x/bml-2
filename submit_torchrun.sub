@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --job-name=second_stage
+#SBATCH --output=log_second_stage_%j.out
+#SBATCH --error=log_second_stage_%j.err
+#SBATCH --partition=plgrid-gpu-a100
+#SBATCH --account=plgllmparamgr-gpu-a100
+#SBATCH --gres=gpu:2
+#SBATCH --cpus-per-gpu=4
+#SBATCH --time=0-00:01:00
+#SBATCH --mem=16G
+
+echo "Starting submit_begin on host $(hostname)"
+
+source ./.env
+
+source ~/venv/bin/activate
+torchrun ./main.py --n_training_steps 100
