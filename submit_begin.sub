@@ -11,6 +11,7 @@
 
 echo "Starting submit_begin on host $(hostname)"
 
-source $SCRATCH/venv/bin/activate
+source $HOME/venv/bin/activate
+source $SCRATCH/bml-2/.env
 echo using api key: $WAND_API_KEY
 python ./main.py --n_training_steps 100
