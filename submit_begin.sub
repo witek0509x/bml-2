@@ -13,5 +13,5 @@ echo "Starting submit_begin on host $(hostname)"
 
 source ./.env
 
-source ~/env/bin/activate
+source ~/venv/bin/activate
 python ./main.py --n_training_steps 100
