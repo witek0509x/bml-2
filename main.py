@@ -341,7 +341,7 @@ def main(rank, world_size, args):
 
 
 if __name__ == "__main__":
-    print(f"Node: {os.environ['GROUP_RANK']} on rank {os.environ['LOCAL_RANK']}, global {os.environ['RANK']} started")
+    print(f"Node: {os.environ['GROUP_RANK']} on rank {os.environ['LOCAL_RANK']}, global {os.environ['RANK']} started, log is {log}")
     parser = argparse.ArgumentParser(description='FSDP implementation')
     parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -363,10 +363,10 @@ if __name__ == "__main__":
 
 
 
-    world_size = torch.cuda.device_count()
+    ranks, nodes = torch.cuda.device_count(), dist.get_world_size()
     rank = int(os.environ["LOCAL_RANK"])
     if log:
         wandb.login(key=os.environ['WANDB_API_KEY'])
         wandb.init(project="transformer-training", config=args.__dict__)
-    print(f"WORLD_SIZE = {world_size}")
-    main(rank, world_size, args)
+    print(f"RANKS = {ranks}, NODES = {nodes}, RANK = {rank}")
+    main(rank, ranks, args)
