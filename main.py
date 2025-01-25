@@ -325,13 +325,13 @@ def main(rank, world_size, args):
     config = SimpleNamespace(
         train_steps=args.n_training_steps,
         vocab_size=50257,
-        max_len=256,
+        max_len=args.seq_len,
         d_model=args.dmodel,
         num_heads=args.n_heads,
         num_layers=args.n_layers,
-        learning_rate=1e-4,
-        dropout=0.0,
-        seq_length=256,
+        learning_rate=args.lr,
+        dropout=args.dropout,
+        seq_length=args.seq_len,
         batch_size=args.batch_size,
         log_train_loss_freq=100,
         log_valid_loss_freq=100
@@ -353,6 +353,12 @@ if __name__ == "__main__":
                         help='number of training steps (default: 1000)')
     parser.add_argument('--n_heads', type=int, default=4, metavar='M',
                         help='Number of attention heads (default: 4)')
+    parser.add_argument('--dropout', type=float, default=0.0, metavar='M',
+                        help='Droput (default: 0.0)')
+    parser.add_argument('--seq_len', type=int, default=256, metavar='M',
+                        help='Sequence length (default: 256)')
+    parser.add_argument('--lr', type=float, default=1e-4, metavar='M',
+                        help='Initial learning rate (default: 1e-4)')
     args = parser.parse_args()
 
 

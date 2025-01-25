@@ -20,4 +20,15 @@ export LOGLEVEL=INFO
 
 source $HOME/venv/bin/activate
 source $SCRATCH/bml-2/.env
-torchrun --nnodes 2 --nproc_per_node 2 --rdzv_id $RANDOM --rdzv_backend c10d --rdzv_endpoint $head_node_ip:29500 ./main.py --n_training_steps 2000
+torchrun \
+  --nnodes 2 \
+  --nproc_per_node 2 \
+  --rdzv_id $RANDOM \
+  --rdzv_backend c10d \
+  --rdzv_endpoint $head_node_ip:29500 \
+  ./main.py \
+  --n_training_steps 2000 \
+  --batch_size 256 \
+  --n_layers 4 \
+  --dmodel 256 \
+  --n_heads 4
