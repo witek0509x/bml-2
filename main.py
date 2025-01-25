@@ -1,4 +1,5 @@
 import argparse
+import functools
 import math
 from functools import partial
 import torch
@@ -28,7 +29,7 @@ from torch.distributed.fsdp.fully_sharded_data_parallel import (
 from torch.distributed.fsdp.wrap import (
     size_based_auto_wrap_policy,
     enable_wrap,
-    wrap,
+    wrap, transformer_auto_wrap_policy,
 )
 
 
@@ -255,7 +256,17 @@ def train_model(config, rank, world_size):
     valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation", world_size=world_size, rank=rank)
     validation_steps = int(1e06 // (config.batch_size * config.seq_length))
     model = Transformer(config)
-    model = FSDP(model, device_id=rank, mixed_precision=mixed_precision_policy).to(rank)
+    wrap_policy = functools.partial(
+        transformer_auto_wrap_policy,
+        transformer_layer_cls={
+            Block,
+        },
+    )
+    model = FSDP(model,
+                 device_id=rank,
+                 mixed_precision=mixed_precision_policy,
+                 auto_wrap_policy=wrap_policy,
+                 ).to(rank)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
     scaler = GradScaler()
     scheduler = get_cosine_schedule_with_warmup(optimizer, int(config.train_steps * 0.01), config.train_steps)
