@@ -2,7 +2,7 @@ import argparse
 from functools import partial
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, DistributedSampler
 from types import SimpleNamespace
 from torch.optim import AdamW
@@ -245,11 +245,11 @@ def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
 
 
 def train_model(config, rank, world_size):
-    dataloader = get_dataloader(config.batch_size, config.seq_length, world_size, rank)
+    dataloader = get_dataloader(config.batch_size, config.seq_length, world_size=world_size, rank=rank)
     valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation", world_size=world_size, rank=rank)
     validation_steps = int(1e06 // (config.batch_size * config.seq_length))
     model = Transformer(config)
-    model = FSDP(model).to(rank)
+    model = FSDP(model, device_id=rank, mixed_precision=mixed_precision_policy).to(rank)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
     scaler = GradScaler()
     model.train()
