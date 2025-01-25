@@ -248,7 +248,7 @@ def train_model(config, rank, world_size):
     valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation", world_size=world_size, rank=rank)
     validation_steps = int(1e06 // (config.batch_size * config.seq_length))
     model = Transformer(config)
-    print(model)
+
     wrap_policy = functools.partial(
         transformer_auto_wrap_policy,
         transformer_layer_cls={
@@ -265,6 +265,7 @@ def train_model(config, rank, world_size):
                  mixed_precision=mixed_precision_policy,
                  auto_wrap_policy=wrap_policy,
                  ).to(rank)
+    print(model)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
     scaler = GradScaler()
     scheduler = get_cosine_schedule_with_warmup(optimizer, int(config.train_steps * 0.01), config.train_steps)
@@ -340,7 +341,7 @@ def main(rank, world_size, args):
 
 
 if __name__ == "__main__":
-    print(f"Node: {os.environ['GROUP_RANK']} on rank {os.environ['LOCAL_RANK']} started")
+    print(f"Node: {os.environ['GROUP_RANK']} on rank {os.environ['LOCAL_RANK']}, global {os.environ['RANK']} started")
     parser = argparse.ArgumentParser(description='FSDP implementation')
     parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
