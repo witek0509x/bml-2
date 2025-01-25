@@ -2,6 +2,7 @@ import argparse
 from functools import partial
 import torch
 import torch.nn as nn
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, DistributedSampler
 from types import SimpleNamespace
 from torch.optim import AdamW
@@ -10,6 +11,7 @@ from torch.nn.attention import SDPBackend
 from collections import OrderedDict
 from datasets import load_dataset, load_from_disk
 from transformers import GPT2TokenizerFast
+import torch.distributed as dist
 import wandb
 import os
 
@@ -17,6 +19,7 @@ import torch.multiprocessing as mp
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
+    MixedPrecision,
     CPUOffload,
     BackwardPrefetch,
 )
@@ -26,6 +29,12 @@ from torch.distributed.fsdp.wrap import (
     wrap,
 )
 
+
+mixed_precision_policy = MixedPrecision(
+    param_dtype=torch.bfloat16,
+    reduce_dtype=torch.bfloat16,
+    buffer_dtype=torch.bfloat16,
+)
 
 class EmbeddingLayer(nn.Module):
     def __init__(self, vocab_size, embed_dim, max_len):
@@ -192,8 +201,8 @@ def get_dataloader(
         buffer_size=10000,
         seed=42,
         num_workers=2,
+        world_size=1,
         rank=0,
-        world_size=1
 ):
     if split == "train":
         hf_dataset = load_from_disk("/net/tscratch/people/plgkciebiera/datasets/c4/train")
@@ -201,17 +210,15 @@ def get_dataloader(
         hf_dataset = load_from_disk("/net/tscratch/people/plgkciebiera/datasets/c4/validation")
     hf_dataset = hf_dataset.to_iterable_dataset(num_shards=64)
     hf_dataset = hf_dataset.shuffle(buffer_size=buffer_size, seed=seed)
+    hf_dataset = hf_dataset.shard(num_shards=world_size, index=rank)
     tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
-    sampler = DistributedSampler(hf_dataset, rank=rank, num_replicas=world_size, shuffle=False)
-
     dataloader = DataLoader(
         hf_dataset,
         batch_size=batch_size,
         collate_fn=partial(collate_tokenize, tokenizer, sequence_length),
         shuffle=False,
         pin_memory=True,
-        sampler=sampler,
         num_workers=num_workers,
     )
     return dataloader
@@ -238,16 +245,13 @@ def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
 
 
 def train_model(config, rank, world_size):
-    wandb.login(key=os.environ['WANDB_API_KEY'])
-    wandb.init(project="transformer-training", config=config.__dict__)
-    dataloader = get_dataloader(config.batch_size, config.seq_length, rank=rank, world_size=world_size)
-    valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation", rank=rank, world_size=world_size)
+    dataloader = get_dataloader(config.batch_size, config.seq_length, world_size, rank)
+    valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation", world_size=world_size, rank=rank)
     validation_steps = int(1e06 // (config.batch_size * config.seq_length))
     model = Transformer(config)
     model = FSDP(model).to(rank)
-    model.to(rank)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
-
+    scaler = GradScaler()
     model.train()
 
     for i, batch in zip(range(config.train_steps), dataloader):
@@ -255,25 +259,33 @@ def train_model(config, rank, world_size):
         target_ids = batch["target_ids"].to(rank)
         attention_mask = batch["attention_mask"]
 
-        optimizer.zero_grad()
-        outputs = model(input_ids)
+        if i < 4:
+            print("INPUT:", rank, "      ", input_ids)
 
-        mask_loss = F.cross_entropy(
-            outputs.flatten(0, -2),
-            target_ids.reshape(-1).long(),
-            reduction="none",
-        )
-        mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
-        loss = mask_loss.mean()
+        optimizer.zero_grad()
+        with autocast():
+            outputs = model(input_ids)
+
+            mask_loss = F.cross_entropy(
+                outputs.flatten(0, -2),
+                target_ids.reshape(-1).long(),
+                reduction="none",
+            )
+            mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
+            loss = mask_loss.mean()
 
         wandb.log({"train_loss": loss.item(), "step": i})
 
-        if i % config.log_valid_loss_freq == 0 and rank == 0:
+        if i % config.log_valid_loss_freq == 0:
             valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
             wandb.log({"valid_loss": valid_loss, "step": i})
 
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        dist.barrier()
+
+
     if rank == 0:
         final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
         wandb.log({"final_valid_loss": final_valid_loss})
@@ -296,6 +308,7 @@ def main(rank, world_size, args):
         log_train_loss_freq=100,
         log_valid_loss_freq=100
     )
+    dist.init_process_group("nccl", rank=rank, world_size=2)
     torch.cuda.set_device(rank)
     train_model(config, rank, world_size)
 
@@ -314,9 +327,10 @@ if __name__ == "__main__":
                         help='Number of attention heads (default: 4)')
     args = parser.parse_args()
 
+    wandb.login(key=os.environ['WANDB_API_KEY'])
+    wandb.init(project="transformer-training", config=args.__dict__)
+
     world_size = torch.cuda.device_count()
+    rank = int(os.environ["LOCAL_RANK"])
     print(f"WORLD_SIZE = {world_size}")
-    mp.spawn(main,
-             args=(world_size, args),
-             nprocs=world_size,
-             join=True)
+    main(rank, world_size, args)
