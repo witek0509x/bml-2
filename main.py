@@ -226,6 +226,7 @@ def get_dataloader(
 
 def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
     valid_losses = []
+    valid_sizes = []
     for _, batch in zip(range(validation_steps), valid_dataloader):
         with torch.no_grad():
             input_ids = batch["input_ids"].to(rank)
@@ -238,9 +239,12 @@ def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
                 reduction="none",
             )
             mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
-            loss = mask_loss.mean().item()
+            loss = mask_loss.sum().item()
             valid_losses.append(loss)
-            mean_valid_loss = sum(valid_losses) / validation_steps
+            valid_sizes.append(len(mask_loss))
+    mean_valid_loss = torch.zeros(2)
+    mean_valid_loss[0] = sum(valid_losses)
+    mean_valid_loss[1] = sum(valid_sizes)
     return mean_valid_loss
 
 
@@ -263,7 +267,8 @@ def train_model(config, rank, world_size):
             print("INPUT:", rank, "      ", input_ids)
 
         optimizer.zero_grad()
-        with autocast():
+        loss_agg = torch.zeros(2)
+        with autocast("cuda"):
             outputs = model(input_ids)
 
             mask_loss = F.cross_entropy(
@@ -273,23 +278,28 @@ def train_model(config, rank, world_size):
             )
             mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
             loss = mask_loss.mean()
-
-        wandb.log({"train_loss": loss.item(), "step": i})
-
-        if i % config.log_valid_loss_freq == 0:
-            valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
-            wandb.log({"valid_loss": valid_loss, "step": i})
+            loss_agg[0] = loss.item()
+            loss_agg[1] = len(loss)
+        dist.reduce(loss_agg, 0, dist.ReduceOp.Sum)
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
         dist.barrier()
 
+        if rank == 0:
+            wandb.log({"train_loss": (loss_agg[0] / loss_agg[1]).item(), "step": i})
+
+        if i % config.log_valid_loss_freq == 0:
+            valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
+            dist.reduce(valid_loss, 0, dist.ReduceOp.Sum)
+            if rank == 0:
+                wandb.log({"valid_loss": (valid_loss[0] / valid_loss[1]).item(), "step": i})
 
     if rank == 0:
         final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
         wandb.log({"final_valid_loss": final_valid_loss})
-    wandb.finish()
+        wandb.finish()
 
 
 def main(rank, world_size, args):
@@ -327,10 +337,13 @@ if __name__ == "__main__":
                         help='Number of attention heads (default: 4)')
     args = parser.parse_args()
 
-    wandb.login(key=os.environ['WANDB_API_KEY'])
-    wandb.init(project="transformer-training", config=args.__dict__)
+
 
     world_size = torch.cuda.device_count()
     rank = int(os.environ["LOCAL_RANK"])
+
+    if rank == 0:
+        wandb.login(key=os.environ['WANDB_API_KEY'])
+        wandb.init(project="transformer-training", config=args.__dict__)
     print(f"WORLD_SIZE = {world_size}")
     main(rank, world_size, args)
