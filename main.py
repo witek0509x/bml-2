@@ -242,7 +242,7 @@ def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
             loss = mask_loss.sum().item()
             valid_losses.append(loss)
             valid_sizes.append(len(mask_loss))
-    mean_valid_loss = torch.zeros(2)
+    mean_valid_loss = torch.zeros(2).to(rank)
     mean_valid_loss[0] = sum(valid_losses)
     mean_valid_loss[1] = sum(valid_sizes)
     return mean_valid_loss
@@ -267,7 +267,7 @@ def train_model(config, rank, world_size):
             print("INPUT:", rank, "      ", input_ids)
 
         optimizer.zero_grad()
-        loss_agg = torch.zeros(2)
+        loss_agg = torch.zeros(2).to(rank)
         with autocast("cuda"):
             outputs = model(input_ids)
 
