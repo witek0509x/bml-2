@@ -22,7 +22,7 @@ export LOGLEVEL=INFO
 source $HOME/venv/bin/activate
 source $SCRATCH/bml-2/.env
 
-torchrun \
+srun torchrun \
   --nnodes 2 \
   --nproc_per_node 1 \
   --rdzv_id $RANDOM \
