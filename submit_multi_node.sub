@@ -16,7 +16,7 @@ head_node=${nodes_array[0]}
 head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
 
 echo Node IP: $head_node_ip
-echo Nodes: nodes
+echo Nodes: $nodes
 export LOGLEVEL=INFO
 
 source $HOME/venv/bin/activate
