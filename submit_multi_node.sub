@@ -5,7 +5,7 @@
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
 #SBATCH --nodes=2
-#SBATCH --gpu_per_node=2
+#SBATCH --gres=gpu:2
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:05:00
 #SBATCH --mem=16G
