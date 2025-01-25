@@ -5,7 +5,7 @@
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
 #SBATCH --nodes=2
-#SBATCH --gpus 2
+#SBATCH --gpus=2
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:05:00
 #SBATCH --mem=16G
@@ -16,7 +16,7 @@ head_node=${nodes_array[0]}
 head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
 
 echo Node IP: $head_node_ip
-echo Nodes: $nodes
+echo Nodes: $nodes_array
 export LOGLEVEL=INFO
 
 source $HOME/venv/bin/activate
