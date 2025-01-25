@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.nn.attention import SDPBackend
 from collections import OrderedDict
 from datasets import load_dataset, load_from_disk
-from transformers import GPT2TokenizerFast
+from transformers import GPT2TokenizerFast, get_cosine_schedule_with_warmup
 import torch.distributed as dist
 import wandb
 import os
@@ -249,13 +249,6 @@ def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
     mean_valid_loss[1] = sum(valid_sizes)
     return mean_valid_loss
 
-def lr_lambda(current_step, total_steps):
-    warmup_steps = total_steps * 0.01
-    if current_step < warmup_steps:
-        return (float(current_step) / float(warmup_steps)) * 0.95 + 0.05 # setting the minimum lr to 5% of the original value
-    progress = float(current_step - warmup_steps) / float(total_steps - warmup_steps)
-    return (0.5 * (1.0 + math.cos(math.pi * progress))) * 0.95 + 0.05 # setting the minimum lr to 5% of the original value
-
 
 def train_model(config, rank, world_size):
     dataloader = get_dataloader(config.batch_size, config.seq_length, world_size=world_size, rank=rank)
@@ -265,7 +258,7 @@ def train_model(config, rank, world_size):
     model = FSDP(model, device_id=rank, mixed_precision=mixed_precision_policy).to(rank)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
     scaler = GradScaler()
-    scheduler = LambdaLR(optimizer, lr_lambda)
+    scheduler = get_cosine_schedule_with_warmup(optimizer, int(config.train_steps * 0.01), config.train_steps)
     model.train()
 
     for i, batch in zip(range(config.train_steps), dataloader):
