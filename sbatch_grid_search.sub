@@ -15,6 +15,12 @@ nodes_array=($nodes)
 head_node=${nodes_array[0]}
 head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
 
+config=./grid_search.conf
+sample=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $2}' $config)
+
+echo "Starting task with lr = " $sample
+
+
 echo Node IP: $head_node_ip
 export LOGLEVEL=INFO
 
@@ -31,4 +37,7 @@ torchrun \
   --batch_size 256 \
   --n_layers 4 \
   --dmodel 256 \
-  --n_heads 4
+  --n_heads 4 \
+  --seq_len 256 \
+  --dropout 0.0 \
+  --lr $sample
