@@ -22,22 +22,14 @@ import torch.multiprocessing as mp
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
-    MixedPrecision,
-    CPUOffload,
-    BackwardPrefetch,
+    MixedPrecision
 )
 from torch.distributed.fsdp.wrap import (
-    size_based_auto_wrap_policy,
-    enable_wrap,
-    wrap, transformer_auto_wrap_policy,
+     transformer_auto_wrap_policy,
 )
 
+log = os.environ["RANK"] == 0
 
-mixed_precision_policy = MixedPrecision(
-    param_dtype=torch.bfloat16,
-    reduce_dtype=torch.bfloat16,
-    buffer_dtype=torch.bfloat16,
-)
 
 class EmbeddingLayer(nn.Module):
     def __init__(self, vocab_size, embed_dim, max_len):
@@ -256,11 +248,17 @@ def train_model(config, rank, world_size):
     valid_dataloader = get_dataloader(config.batch_size, config.seq_length, split="validation", world_size=world_size, rank=rank)
     validation_steps = int(1e06 // (config.batch_size * config.seq_length))
     model = Transformer(config)
+    print(model)
     wrap_policy = functools.partial(
         transformer_auto_wrap_policy,
         transformer_layer_cls={
             Block,
         },
+    )
+    mixed_precision_policy = MixedPrecision(
+        param_dtype=torch.bfloat16,
+        reduce_dtype=torch.bfloat16,
+        buffer_dtype=torch.bfloat16,
     )
     model = FSDP(model,
                  device_id=rank,
@@ -293,7 +291,7 @@ def train_model(config, rank, world_size):
             mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
             loss_agg[0] = mask_loss.sum().item()
             loss_agg[1] = len(mask_loss)
-        if rank == 0:
+        if log:
             lr = scheduler.get_last_lr()[0]
             wandb.log({"lr": lr, "step": i})
         scaler.scale(mask_loss.mean()).backward()
@@ -304,18 +302,18 @@ def train_model(config, rank, world_size):
 
         dist.reduce(loss_agg, 0, dist.ReduceOp.SUM)
 
-        if rank == 0:
+        if log:
             wandb.log({"train_loss": (loss_agg[0] / loss_agg[1]).item(), "step": i})
 
         if i % config.log_valid_loss_freq == 0:
             valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
             dist.reduce(valid_loss, 0, dist.ReduceOp.SUM)
-            if rank == 0:
+            if log:
                 wandb.log({"valid_loss": (valid_loss[0] / valid_loss[1]).item(), "step": i})
 
     final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
     dist.reduce(final_valid_loss, 0, dist.ReduceOp.SUM)
-    if rank == 0:
+    if log:
         wandb.log({"final_valid_loss": (final_valid_loss[0] / final_valid_loss[1]).item()})
         wandb.finish()
 
@@ -366,8 +364,7 @@ if __name__ == "__main__":
 
     world_size = torch.cuda.device_count()
     rank = int(os.environ["LOCAL_RANK"])
-
-    if rank == 0:
+    if log:
         wandb.login(key=os.environ['WANDB_API_KEY'])
         wandb.init(project="transformer-training", config=args.__dict__)
     print(f"WORLD_SIZE = {world_size}")
