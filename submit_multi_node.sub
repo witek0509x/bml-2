@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=second_stage
-#SBATCH --output=log_second_stage_%j.out
-#SBATCH --error=log_second_stage_%j.err
+#SBATCH --job-name=multi_node
+#SBATCH --output=log_multi_node_%j.out
+#SBATCH --error=log_multi_node%j.err
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
 #SBATCH --nodes=2
