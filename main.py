@@ -286,20 +286,21 @@ def train_model(config, rank, world_size):
         scaler.update()
         dist.barrier()
 
-        dist.reduce(loss_agg, 0, dist.ReduceOp.Sum)
+        dist.reduce(loss_agg, 0, dist.ReduceOp.SUM)
 
         if rank == 0:
             wandb.log({"train_loss": (loss_agg[0] / loss_agg[1]).item(), "step": i})
 
         if i % config.log_valid_loss_freq == 0:
             valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
-            dist.reduce(valid_loss, 0, dist.ReduceOp.Sum)
+            dist.reduce(valid_loss, 0, dist.ReduceOp.SUM)
             if rank == 0:
                 wandb.log({"valid_loss": (valid_loss[0] / valid_loss[1]).item(), "step": i})
 
+    final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
+    dist.reduce(final_valid_loss, 0, dist.ReduceOp.SUM)
     if rank == 0:
-        final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
-        wandb.log({"final_valid_loss": final_valid_loss})
+        wandb.log({"final_valid_loss": (final_valid_loss[0] / final_valid_loss[1]).item()})
         wandb.finish()
 
 
