@@ -1,8 +1,10 @@
 import argparse
+import math
 from functools import partial
 import torch
 import torch.nn as nn
 from torch.amp import GradScaler, autocast
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader, DistributedSampler
 from types import SimpleNamespace
 from torch.optim import AdamW
@@ -247,6 +249,13 @@ def calculate_valid_loss(model, valid_dataloader, rank, validation_steps):
     mean_valid_loss[1] = sum(valid_sizes)
     return mean_valid_loss
 
+def lr_lambda(current_step, total_steps):
+    warmup_steps = total_steps * 0.01
+    if current_step < warmup_steps:
+        return (float(current_step) / float(warmup_steps)) * 0.95 + 0.05 # setting the minimum lr to 5% of the original value
+    progress = float(current_step - warmup_steps) / float(total_steps - warmup_steps)
+    return (0.5 * (1.0 + math.cos(math.pi * progress))) * 0.95 + 0.05 # setting the minimum lr to 5% of the original value
+
 
 def train_model(config, rank, world_size):
     dataloader = get_dataloader(config.batch_size, config.seq_length, world_size=world_size, rank=rank)
@@ -256,6 +265,7 @@ def train_model(config, rank, world_size):
     model = FSDP(model, device_id=rank, mixed_precision=mixed_precision_policy).to(rank)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
     scaler = GradScaler()
+    scheduler = LambdaLR(optimizer, lr_lambda)
     model.train()
 
     for i, batch in zip(range(config.train_steps), dataloader):
@@ -279,11 +289,13 @@ def train_model(config, rank, world_size):
             mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
             loss_agg[0] = mask_loss.sum().item()
             loss_agg[1] = len(mask_loss)
-
-
+        if rank == 0:
+            lr = scheduler.get_last_lr()[0]
+            wandb.log({"lr": lr, "step": i})
         scaler.scale(mask_loss.mean()).backward()
         scaler.step(optimizer)
         scaler.update()
+        scheduler.step()
         dist.barrier()
 
         dist.reduce(loss_agg, 0, dist.ReduceOp.SUM)
