@@ -336,12 +336,13 @@ def main(rank, world_size, args):
         log_train_loss_freq=100,
         log_valid_loss_freq=100
     )
-    dist.init_process_group("nccl", rank=rank, world_size=2)
+    dist.init_process_group("nccl")
     torch.cuda.set_device(rank)
     train_model(config, rank, world_size)
 
 
 if __name__ == "__main__":
+    print(f"Node: {os.environ['GROUP_RANK']} on rank {os.environ['LOCAL_RANK']} started")
     parser = argparse.ArgumentParser(description='FSDP implementation')
     parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
