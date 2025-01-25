@@ -277,15 +277,16 @@ def train_model(config, rank, world_size):
                 reduction="none",
             )
             mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
-            loss = mask_loss.mean()
-            loss_agg[0] = loss.item()
-            loss_agg[1] = len(loss)
-        dist.reduce(loss_agg, 0, dist.ReduceOp.Sum)
+            loss_agg[0] = mask_loss.sum().item()
+            loss_agg[1] = len(mask_loss)
 
-        scaler.scale(loss).backward()
+
+        scaler.scale(mask_loss.mean()).backward()
         scaler.step(optimizer)
         scaler.update()
         dist.barrier()
+
+        dist.reduce(loss_agg, 0, dist.ReduceOp.Sum)
 
         if rank == 0:
             wandb.log({"train_loss": (loss_agg[0] / loss_agg[1]).item(), "step": i})
