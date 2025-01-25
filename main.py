@@ -363,7 +363,7 @@ if __name__ == "__main__":
 
 
 
-    ranks, nodes = torch.cuda.device_count(), dist.get_world_size()
+    ranks, nodes = torch.cuda.device_count(), int(os.environ['WORLD_SIZE'])
     rank = int(os.environ["LOCAL_RANK"])
     if log:
         wandb.login(key=os.environ['WANDB_API_KEY'])
