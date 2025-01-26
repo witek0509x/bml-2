@@ -4,7 +4,9 @@ import math
 from functools import partial
 import torch
 import torch.nn as nn
+from setuptools.sandbox import save_path
 from torch.amp import GradScaler, autocast
+from torch.distributed.checkpoint import load_sharded_optimizer_state_dict
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader, DistributedSampler
 from types import SimpleNamespace
@@ -17,10 +19,12 @@ from transformers import GPT2TokenizerFast, get_cosine_schedule_with_warmup
 import torch.distributed as dist
 import wandb
 import os
+import torch.distributed.checkpoint as dist_cp
 
 import torch.multiprocessing as mp
 
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, BackwardPrefetch, CPUOffload
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, BackwardPrefetch, CPUOffload, \
+    StateDictType
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
     MixedPrecision
 )
@@ -268,10 +272,33 @@ def train_model(config, rank, world_size):
                  auto_wrap_policy=wrap_policy,
                  backward_prefetch=BackwardPrefetch.BACKWARD_POST # to fit in memory for dual node experiment
                  ).to(rank)
-    print(model)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
     scaler = GradScaler()
     scheduler = get_cosine_schedule_with_warmup(optimizer, int(config.train_steps * 0.01), config.train_steps)
+
+    if config.load_path is not None:
+        with FSDP.state_dict_type(model, StateDictType.SHARDED_STATE_DICT):
+            state_dict = {
+                "model": model.state_dict(),
+                "scheduler": scheduler.state_dict()
+            }
+            dist_cp.load(
+                state_dict=state_dict,
+                storage_reader=dist_cp.FileSystemReader(config.load_path),
+            )
+            model.load_state_dict(state_dict["model"])
+            scheduler.load_state_dict(state_dict["scheduler"])
+
+            optim_state = load_sharded_optimizer_state_dict(
+                model_state_dict=state_dict["model"],
+                optimizer_key="optim",
+                storage_reader=dist_cp.FileSystemReader(config.load_path),
+            )
+
+            flattened_osd = FSDP.optim_state_dict_to_load(
+                model, optimizer, optim_state["optim"]
+            )
+            optimizer.load_state_dict(flattened_osd)
     model.train()
 
     for i, batch in zip(range(config.train_steps), dataloader):
@@ -317,6 +344,20 @@ def train_model(config, rank, world_size):
 
     final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
     dist.reduce(final_valid_loss, 0, dist.ReduceOp.SUM)
+
+    if config.save_path is not None:
+        with FSDP.state_dict_type(model, StateDictType.SHARDED_STATE_DICT):
+            state_dict = {
+                "model": model.state_dict(),
+                "optim": FSDP.optim_state_dict(model, optimizer),
+                "scheduler": scheduler.state_dict()
+            }
+
+            dist_cp.save_state_dict(
+                state_dict=state_dict,
+                storage_writer=dist_cp.FileSystemWriter(config.save_path),
+            )
+
     if log:
         wandb.log({"final_valid_loss": (final_valid_loss[0] / final_valid_loss[1]).item()})
         wandb.finish()
@@ -336,7 +377,9 @@ def main(rank, world_size, args):
         seq_length=args.seq_len,
         batch_size=args.batch_size,
         log_train_loss_freq=100,
-        log_valid_loss_freq=100
+        log_valid_loss_freq=100,
+        save_path=args.save_path,
+        load_path=args.load_path,
     )
     dist.init_process_group("nccl")
     torch.cuda.set_device(rank)
@@ -362,6 +405,10 @@ if __name__ == "__main__":
                         help='Sequence length (default: 256)')
     parser.add_argument('--lr', type=float, default=1e-4, metavar='M',
                         help='Initial learning rate (default: 1e-4)')
+    parser.add_argument('--save_path', type=str, default=None, metavar='M',
+                        help='Checkpoint save path (default no save)')
+    parser.add_argument('--load_path', type=str, default=None, metavar='M',
+                        help='Checkpoint load path (default new model)')
     args = parser.parse_args()
 
 
