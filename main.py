@@ -20,7 +20,7 @@ import os
 
 import torch.multiprocessing as mp
 
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
     MixedPrecision
 )
@@ -28,7 +28,7 @@ from torch.distributed.fsdp.wrap import (
      transformer_auto_wrap_policy,
 )
 
-log = os.environ["RANK"] == 0
+log = (int(os.environ["RANK"]) == 0)
 
 
 class EmbeddingLayer(nn.Module):
@@ -260,9 +260,11 @@ def train_model(config, rank, world_size):
         reduce_dtype=torch.bfloat16,
         buffer_dtype=torch.bfloat16,
     )
+    sharding_strategy = ShardingStrategy.FULL_SHARD
     model = FSDP(model,
                  device_id=rank,
                  mixed_precision=mixed_precision_policy,
+                 sharding_strategy=sharding_strategy,
                  auto_wrap_policy=wrap_policy,
                  ).to(rank)
     print(model)
