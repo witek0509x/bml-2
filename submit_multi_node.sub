@@ -4,11 +4,11 @@
 #SBATCH --error=log_multi_node%j.err
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:05:00
-#SBATCH --mem=16G
+#SBATCH --mem=128G
 
 nodes=( $( scontrol show hostnames $SLURM_JOB_NODELIST ) )
 nodes_array=($nodes)
@@ -23,7 +23,7 @@ source $HOME/venv/bin/activate
 source $SCRATCH/bml-2/.env
 
 srun torchrun \
-  --nnodes 1 \
+  --nnodes 2 \
   --nproc_per_node 1 \
   --rdzv_id $RANDOM \
   --rdzv_backend c10d \

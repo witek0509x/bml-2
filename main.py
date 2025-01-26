@@ -20,7 +20,7 @@ import os
 
 import torch.multiprocessing as mp
 
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, BackwardPrefetch
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
     MixedPrecision
 )
@@ -262,10 +262,11 @@ def train_model(config, rank, world_size):
     )
     sharding_strategy = ShardingStrategy.FULL_SHARD
     model = FSDP(model,
-                 device_id=rank,
+                 device_id=torch.cuda.current_device(),
                  mixed_precision=mixed_precision_policy,
                  sharding_strategy=sharding_strategy,
                  auto_wrap_policy=wrap_policy,
+                 backward_prefetch=BackwardPrefetch.BACKWARD_POST # to fit in memory for dual node experiment
                  ).to(rank)
     print(model)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate)
