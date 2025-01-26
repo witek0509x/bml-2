@@ -5,7 +5,7 @@
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
 #SBATCH --nodes=2
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:05:00
 #SBATCH --mem=128G
@@ -24,7 +24,7 @@ source $SCRATCH/bml-2/.env
 
 srun torchrun \
   --nnodes 2 \
-  --nproc_per_node 2 \
+  --nproc_per_node 1 \
   --rdzv_id $RANDOM \
   --rdzv_backend c10d \
   --rdzv_endpoint $head_node_ip \

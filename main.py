@@ -284,17 +284,17 @@ def train_model(config, rank, world_size):
 
         optimizer.zero_grad()
         loss_agg = torch.zeros(2).to(rank)
-        with autocast("cuda"):
-            outputs = model(input_ids)
 
-            mask_loss = F.cross_entropy(
-                outputs.flatten(0, -2),
-                target_ids.reshape(-1).long(),
-                reduction="none",
-            )
-            mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
-            loss_agg[0] = mask_loss.sum().item()
-            loss_agg[1] = len(mask_loss)
+        outputs = model(input_ids)
+
+        mask_loss = F.cross_entropy(
+            outputs.flatten(0, -2),
+            target_ids.reshape(-1).long(),
+            reduction="none",
+        )
+        mask_loss = mask_loss[attention_mask.reshape(-1) == 1]
+        loss_agg[0] = mask_loss.sum().item()
+        loss_agg[1] = len(mask_loss)
         if log:
             lr = scheduler.get_last_lr()[0]
             wandb.log({"lr": lr, "step": i})
