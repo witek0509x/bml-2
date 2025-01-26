@@ -341,6 +341,8 @@ def train_model(config, rank, world_size):
             dist.reduce(valid_loss, 0, dist.ReduceOp.SUM)
             if log:
                 wandb.log({"valid_loss": (valid_loss[0] / valid_loss[1]).item(), "step": i})
+        if i > config.early_break:
+            break
 
     final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
     dist.reduce(final_valid_loss, 0, dist.ReduceOp.SUM)
@@ -380,6 +382,7 @@ def main(rank, world_size, args):
         log_valid_loss_freq=100,
         save_path=args.save_path,
         load_path=args.load_path,
+        early_break=args.early_break
     )
     dist.init_process_group("nccl")
     torch.cuda.set_device(rank)
@@ -409,6 +412,8 @@ if __name__ == "__main__":
                         help='Checkpoint save path (default no save)')
     parser.add_argument('--load_path', type=str, default=None, metavar='M',
                         help='Checkpoint load path (default new model)')
+    parser.add_argument('--early_break', type=int, default=None, metavar='M',
+                        help='Parameter for saving testing')
     args = parser.parse_args()
 
 
