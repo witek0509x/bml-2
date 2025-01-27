@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=second_stage
-#SBATCH --output=log_second_stage_%j.out
-#SBATCH --error=log_second_stage_%j.err
+#SBATCH --job-name=2gpu
+#SBATCH --output=log_2gpu_%j.out
+#SBATCH --error=log_2gpu_%j.err
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --account=plgllmparamgr-gpu-a100
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=0-00:05:00
 #SBATCH --mem=16G
@@ -14,4 +14,4 @@ echo "Starting torchrun on host $(hostname)"
 source $HOME/venv/bin/activate
 source $SCRATCH/bml-2/.env
 
-srun torchrun --nnodes 1 --nproc_per_node 1 --master_addr="127.0.0.1" --master_port=29500 ./main.py --n_training_steps 2000
+srun torchrun --nnodes 1 --nproc_per_node 2 --master_addr="127.0.0.1" --master_port=29500 ./main.py --n_training_steps 2000

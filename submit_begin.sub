@@ -13,4 +13,5 @@ echo "Starting submit_begin on host $(hostname)"
 
 source $HOME/venv/bin/activate
 source $SCRATCH/bml-2/.env
-python ./main.py --n_training_steps 100
+
+srun python ./main.py --n_training_steps 100

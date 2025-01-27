@@ -1,27 +1,23 @@
 import argparse
 import functools
-import math
+
 from functools import partial
 import torch
 import torch.nn as nn
-from setuptools.sandbox import save_path
-from torch.amp import GradScaler, autocast
+from torch.amp import GradScaler
 from torch.distributed.checkpoint import load_sharded_optimizer_state_dict
-from torch.optim.lr_scheduler import LambdaLR
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 from types import SimpleNamespace
 from torch.optim import AdamW
 import torch.nn.functional as F
 from torch.nn.attention import SDPBackend
 from collections import OrderedDict
-from datasets import load_dataset, load_from_disk
+from datasets import load_from_disk
 from transformers import GPT2TokenizerFast, get_cosine_schedule_with_warmup
 import torch.distributed as dist
 import wandb
 import os
 import torch.distributed.checkpoint as dist_cp
-
-import torch.multiprocessing as mp
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, BackwardPrefetch, CPUOffload, \
     StateDictType
@@ -341,8 +337,9 @@ def train_model(config, rank, world_size):
             dist.reduce(valid_loss, 0, dist.ReduceOp.SUM)
             if log:
                 wandb.log({"valid_loss": (valid_loss[0] / valid_loss[1]).item(), "step": i})
-        if i > config.early_break:
-            break
+        if config.early_breakis is not None:
+            if i > config.early_break:
+                break
 
     final_valid_loss = calculate_valid_loss(model, valid_dataloader, rank, validation_steps)
     dist.reduce(final_valid_loss, 0, dist.ReduceOp.SUM)
